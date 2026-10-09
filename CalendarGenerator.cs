@@ -14,23 +14,44 @@ namespace CalendarGenerator
 
         private static void Main(string[] args)
         {
-            Console.WriteLine("=== Weekly Schedule PNG Generator ===");
+
+
+
+
+
+
+
+
+            Console.WriteLine("=== Weekly Schedule PNG Generator ===\n");
 
             Console.Write("Enter DPI resolution (e.g. 300): ");
             if (!int.TryParse(Console.ReadLine(), out int dpi) || dpi <= 0)
-            {
                 dpi = 300;
-            }
 
-            Console.Write("Enter Monday date for target week (e.g. 05.10.2026): ");
+        EnterDate:
+            Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today: ");
             string? dateInput = Console.ReadLine();
 
-            if (!DateTime.TryParseExact(dateInput, new[] { "d.MM.yyyy", "dd.MM.yyyy", "d.M.yyyy", "dd.M.yyyy" },
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime targetMonday))
+            DateTime inputDate;
+
+            if (string.IsNullOrWhiteSpace(dateInput))
             {
-                Console.WriteLine("Invalid date format. Program will terminate.");
-                return;
+                // Nothing or only spaces -> use current date
+                inputDate = DateTime.Today;
             }
+            else if (!DateTime.TryParseExact(dateInput.Trim(), new[] { "d.MM.yyyy", "dd.MM.yyyy", "d.M.yyyy", "dd.M.yyyy" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out inputDate))
+            {
+                Console.WriteLine("Invalid date format. Accepted date format: DD.MM.YYYY or D.MM.YYYY or D.M.YYYY\n\n");
+                goto EnterDate;
+            }
+
+            // Monday of the week containing inputDate (week starts on Monday)
+            int daysSinceMonday = ((int)inputDate.DayOfWeek + 6) % 7;
+            DateTime targetMonday = inputDate.Date.AddDays(-daysSinceMonday);
+
+            Console.WriteLine($"Monday of that week: {targetMonday:dd.MM.yyyy}");
+
+
 
 
             if (!File.Exists(csvPath))
@@ -42,9 +63,7 @@ namespace CalendarGenerator
             List<ScheduleEntry> allEntries = LoadEntriesFromCsv(csvPath);
             DateTime targetSunday = targetMonday.AddDays(7);
 
-            List<ScheduleEntry> weeklyEntries = allEntries
-                .Where(e => e.Date >= targetMonday && e.Date < targetSunday)
-                .ToList();
+            List<ScheduleEntry> weeklyEntries = allEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).ToList();
 
             Console.WriteLine($"Found {weeklyEntries.Count} class entries for the selected week.");
 
@@ -77,7 +96,7 @@ namespace CalendarGenerator
                 string rawStart = columns[8].Trim();    // Column I
                 string rawEnd = columns[9].Trim();      // Column J
 
-                if (DateTime.TryParseExact(rawDate, new[] { "d.MM.yyyy", "dd.MM.yyyy", "d.M.yyyy", "dd.M.yyyy" },
+                if (DateTime.TryParseExact(rawDate, new[] { "d.MM.yyyy", "dd.MM.yyyy" },
                     CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime classDate) &&
                     TimeSpan.TryParse(rawStart, out TimeSpan startTime) &&
                     TimeSpan.TryParse(rawEnd, out TimeSpan endTime))
@@ -96,6 +115,7 @@ namespace CalendarGenerator
             return entries;
         }
 
+
         private static void GenerateScheduleImage(List<ScheduleEntry> entries, int dpi, string outputPath)
         {
             // Calculating standard A4 landscape dimensions (1 : sqrt(2))
@@ -111,12 +131,12 @@ namespace CalendarGenerator
 
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
-            graphics.Clear(Color.FromArgb(242, 242, 242));
+            graphics.Clear(Color.FromArgb(255, 255, 255));
 
             float scaleFactor = dpi / 96f;
-            using Font fontSmall = new Font("Segoe UI", 8.5f * scaleFactor, FontStyle.Regular);
-            using Font fontRegular = new Font("Segoe UI", 10f * scaleFactor, FontStyle.Regular);
-            using Font fontHeader = new Font("Segoe UI", 11f * scaleFactor, FontStyle.Bold);
+            using Font fontSmall = new Font("FL Pismo Techniczne", 6.5f * scaleFactor, FontStyle.Regular);
+            using Font fontRegular = new Font("FL Pismo TechniczneI", 8.5f * scaleFactor, FontStyle.Regular);
+            using Font fontHeader = new Font("FL Pismo Techniczne", 11f * scaleFactor, FontStyle.Regular);
 
             float workX = marginPixels;
             float workY = marginPixels;
@@ -152,7 +172,7 @@ namespace CalendarGenerator
 
             // 1. Draw Day Headers
             float currentColumnX = workX + timeColumnWidth;
-            using SolidBrush headerBrush = new SolidBrush(Color.FromArgb(225, 225, 225));
+            using SolidBrush headerBrush = new SolidBrush(Color.FromArgb(255, 255, 255));
             graphics.FillRectangle(headerBrush, workX, workY, workWidth, headerHeight);
 
             for (int i = 0; i < 7; i++)
@@ -205,7 +225,10 @@ namespace CalendarGenerator
                 );
 
                 // Fill card background with white and draw outline
-                graphics.FillRectangle(Brushes.White, cardRect);
+                if (entry.Type == EClassType.Lecture)
+                    graphics.FillRectangle(Brushes.LightGray, cardRect);
+                else
+                    graphics.FillRectangle(Brushes.White, cardRect);
                 graphics.DrawRectangle(Pens.Black, cardRect.X, cardRect.Y, cardRect.Width, cardRect.Height);
 
                 // Top header text inside class box (e.g., "8:00, W")

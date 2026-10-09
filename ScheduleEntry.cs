@@ -32,6 +32,8 @@
                 return EClassType.Language;
             else if (normalized.Contains("zajęcia z wf"))
                 return EClassType.PE;
+            else if (normalized.Contains("ćwiczenia projektowe"))
+                return EClassType.Project;
 
             return EClassType.Other;
         }
@@ -48,6 +50,7 @@
                 EClassType.Tutorial => "ĆW",
                 EClassType.Language => "L",
                 EClassType.PE => "WF",
+                EClassType.Project => "P",
                 _ => "Inne"
             };
         }

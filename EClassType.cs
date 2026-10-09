@@ -12,6 +12,7 @@
         Tutorial,     // Ćwiczenia
         Language, // Lektorat (Ć)
         PE, //Wf
+        Project,
         Other
 
     }
