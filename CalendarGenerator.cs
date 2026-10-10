@@ -1,27 +1,16 @@
-﻿using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Text;
+﻿using SkiaSharp;
 using System.Globalization;
 
 namespace CalendarGenerator
 {
     internal class Program
     {
-              
-
         private static void Main(string[] args)
         {
-
             Config.Load("D:\\Programowanie\\c#\\CalendarGenerator\\config.json");
-
-
-
-
-
 
             Console.WriteLine("=== Weekly Schedule PNG Generator ===\n");
 
-            
         EnterDate:
             Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today: ");
             string? dateInput = Console.ReadLine();
@@ -45,9 +34,6 @@ namespace CalendarGenerator
 
             Console.WriteLine($"Monday of that week: {targetMonday:dd.MM.yyyy}");
 
-
-
-
             if (!File.Exists(Config.CsvFilepath))
             {
                 Console.WriteLine($"CSV file not found: {Config.CsvFilepath}");
@@ -61,13 +47,12 @@ namespace CalendarGenerator
 
             List<ScheduleEntry> allEntries = LoadEntriesFromCsv(Config.CsvFilepath);
             allEntries.AddRange(LoadEntriesFromCsv(Config.AdditionalClassesFilepath));
-            
+
             DateTime targetSunday = targetMonday.AddDays(7);
 
             List<ScheduleEntry> weeklyEntries = allEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).ToList();
 
             Console.WriteLine($"Found {weeklyEntries.Count} class entries for the selected week.");
-
 
             GenerateScheduleImage(weeklyEntries);
             Console.WriteLine($"Successfully generated image: {Config.SaveFilepath}");
@@ -116,7 +101,6 @@ namespace CalendarGenerator
             return entries;
         }
 
-
         private static void GenerateScheduleImage(List<ScheduleEntry> entries)
         {
             // Calculating standard A4 landscape dimensions (1 : sqrt(2))
@@ -127,19 +111,25 @@ namespace CalendarGenerator
             int widthPixels = (int)Math.Round(heightPixels * Math.Sqrt(2));
             int marginPixels = (int)Math.Round(Config.BorderMargin * millimetersToPixels); // outer margin
 
-            
-            
-            using Bitmap bitmap = new Bitmap(widthPixels, heightPixels);
-            using Graphics graphics = Graphics.FromImage(bitmap);
+            using SKSurface surface = SKSurface.Create(new SKImageInfo(widthPixels, heightPixels, SKColorType.Rgba8888, SKAlphaType.Premul));
+            SKCanvas canvas = surface.Canvas;
 
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
-            graphics.Clear(Config.BackgroundColor);
+            // Config.BackgroundColor is assumed to be a System.Drawing.Color; drop the conversion if it is already an SKColor
+            var bg = Config.BackgroundColor;
+            canvas.Clear(new SKColor(bg.R, bg.G, bg.B, bg.A));
 
             float scaleFactor = Config.Dpi / 96f;
-            using Font fontSmall = new Font(Config.Font, Config.SmallFontSize * scaleFactor, FontStyle.Regular);
-            using Font fontRegular = new Font(Config.Font, Config.StandardFontSize * scaleFactor, FontStyle.Regular);
-            using Font fontHeader = new Font(Config.Font, Config.BigFontSize * scaleFactor, FontStyle.Regular);
+            float pointsToPixels = Config.Dpi / 72f; // font sizes in config are in points
+
+            using SKTypeface typeface = SKTypeface.FromFamilyName(Config.Font);
+            using SKFont fontSmall = CreateFont(typeface, Config.SmallFontSize * pointsToPixels);
+            using SKFont fontRegular = CreateFont(typeface, Config.StandardFontSize * pointsToPixels);
+            using SKFont fontHeader = CreateFont(typeface, Config.BigFontSize * pointsToPixels);
+
+            using SKPaint textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
+            using SKPaint fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+            using SKPaint gridPaint = new SKPaint { Color = SKColors.LightGray, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+            using SKPaint borderPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
 
             float workX = marginPixels;
             float workY = marginPixels;
@@ -147,7 +137,10 @@ namespace CalendarGenerator
             float workHeight = heightPixels - 2 * marginPixels;
 
             float headerHeight = 40f * scaleFactor;
-            float timeColumnWidth = 55f * scaleFactor;
+
+            // Measure the widest typical time string and add proportional padding for the cell
+            float cellPadding = 12f * scaleFactor;
+            float timeColumnWidth = fontSmall.MeasureText("00:00") + cellPadding;
 
             float availableDaysWidth = workWidth - timeColumnWidth;
 
@@ -167,48 +160,37 @@ namespace CalendarGenerator
             int maxHour = entries.Any() ? Math.Max(18, entries.Max(e => e.EndTime.Hours) + 1) : 18;
             float hourRowHeight = (workHeight - headerHeight) / (maxHour - minHour);
 
-            using StringFormat centerFormat = new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
-            };
-
             // 1. Draw Day Headers
             float currentColumnX = workX + timeColumnWidth;
-            using SolidBrush headerBrush = new SolidBrush(Color.FromArgb(255, 255, 255));
-            graphics.FillRectangle(headerBrush, workX, workY, workWidth, headerHeight);
+            fillPaint.Color = SKColors.White;
+            canvas.DrawRect(workX, workY, workWidth, headerHeight, fillPaint);
 
             for (int i = 0; i < 7; i++)
             {
-                RectangleF headerRect = new RectangleF(currentColumnX, workY, columnWidths[i], headerHeight);
-                graphics.DrawString(dayNames[i], fontHeader, Brushes.Black, headerRect, centerFormat);
-                graphics.DrawLine(Pens.LightGray, currentColumnX, workY, currentColumnX, workY + workHeight);
+                SKRect headerRect = SKRect.Create(currentColumnX, workY, columnWidths[i], headerHeight);
+                DrawTextCentered(canvas, dayNames[i], fontHeader, textPaint, headerRect);
+                canvas.DrawLine(currentColumnX, workY, currentColumnX, workY + workHeight, gridPaint);
                 currentColumnX += columnWidths[i];
             }
 
             // 2. Draw Time Grid and Hour Labels
             float gridStartY = workY + headerHeight;
-            using StringFormat timeFormat = new StringFormat
-            {
-                Alignment = StringAlignment.Far,
-                LineAlignment = StringAlignment.Near
-            };
 
             for (int i = 0; i <= maxHour - minHour; i++)
             {
                 float currentY = gridStartY + i * hourRowHeight;
-                graphics.DrawLine(Pens.LightGray, workX, currentY, workX + workWidth, currentY);
+                canvas.DrawLine(workX, currentY, workX + workWidth, currentY, gridPaint);
 
                 if (i < maxHour - minHour)
                 {
                     string hourText = $"{minHour + i}:00";
-                    RectangleF timeRect = new RectangleF(workX, currentY, timeColumnWidth - (Config.BorderMargin * scaleFactor), hourRowHeight);
-                    graphics.DrawString(hourText, fontSmall, Brushes.Black, timeRect, timeFormat);
+                    SKRect timeRect = SKRect.Create(workX, currentY, timeColumnWidth - (Config.BorderMargin * scaleFactor), hourRowHeight);
+                    DrawTextTopRight(canvas, hourText, fontSmall, textPaint, timeRect);
                 }
             }
 
-            // Draw outer border frame (5mm inside canvas)
-            graphics.DrawRectangle(Pens.Black, workX, workY, workWidth, workHeight);
+            // Draw outer border frame
+            canvas.DrawRect(workX, workY, workWidth, workHeight, borderPaint);
 
             // 3. Draw Class Boxes
             foreach (var entry in entries)
@@ -219,50 +201,143 @@ namespace CalendarGenerator
                 float cardY = gridStartY + (float)(entry.StartTime.TotalHours - minHour) * hourRowHeight;
                 float cardHeight = (float)(entry.EndTime.TotalHours - entry.StartTime.TotalHours) * hourRowHeight;
 
-                float marginOffset = 3f * scaleFactor;
-                RectangleF cardRect = new RectangleF(
+                float marginOffset = 2f * scaleFactor;
+                SKRect cardRect = SKRect.Create(
                     cardX + marginOffset,
                     cardY + marginOffset,
                     columnWidths[dayIndex] - 2 * marginOffset,
                     cardHeight - 2 * marginOffset
                 );
 
-                // Fill card background with white and draw outline
-                if (Config.HightlightLectures && entry.Type == EClassType.Lecture)
-                    graphics.FillRectangle(Brushes.LightGray, cardRect);
-                else
-                    graphics.FillRectangle(Brushes.White, cardRect);
-                graphics.DrawRectangle(Pens.Black, cardRect.X, cardRect.Y, cardRect.Width, cardRect.Height);
+                // Fill card background and draw outline
+                fillPaint.Color = (Config.HightlightLectures && entry.Type == EClassType.Lecture)
+                    ? SKColors.LightGray
+                    : SKColors.White;
+                canvas.DrawRect(cardRect, fillPaint);
+                canvas.DrawRect(cardRect, borderPaint);
 
                 // Top header text inside class box (e.g., "8:00, W")
                 string cardHeader = $"{entry.StartTime:h\\:mm}, {entry.GetTypeCode()}";
 
-                float textPadding = 4f * scaleFactor;
-                RectangleF headerTextRect = new RectangleF(
-                    cardRect.X + textPadding,
-                    cardRect.Y + textPadding,
+                float textPadding = scaleFactor;
+                SKRect headerTextRect = SKRect.Create(
+                    cardRect.Left + textPadding,
+                    cardRect.Top + textPadding,
                     cardRect.Width - 2 * textPadding,
-                    fontSmall.Height + 2
+                    fontSmall.Spacing + 2
                 );
 
-                RectangleF nameTextRect = new RectangleF(
-                    cardRect.X + textPadding,
-                    headerTextRect.Bottom + textPadding,
+                SKRect nameTextRect = SKRect.Create(
+                    cardRect.Left + textPadding,
+                    headerTextRect.Bottom + textPadding * 0.2f,
                     cardRect.Width - 2 * textPadding,
                     cardRect.Height - headerTextRect.Height - 3 * textPadding
                 );
 
-                using StringFormat textWrapFormat = new StringFormat
-                {
-                    Alignment = StringAlignment.Near,
-                    Trimming = StringTrimming.Word
-                };
-
-                graphics.DrawString(cardHeader, fontSmall, Brushes.Black, headerTextRect, textWrapFormat);
-                graphics.DrawString(entry.SubjectName, fontRegular, Brushes.Black, nameTextRect, textWrapFormat);
+                DrawTextWrapped(canvas, cardHeader, fontSmall, textPaint, headerTextRect);
+                DrawTextWrapped(canvas, entry.SubjectName, fontRegular, textPaint, nameTextRect);
             }
 
-            bitmap.Save(Config.SaveFilepath, System.Drawing.Imaging.ImageFormat.Png);
+            // Encode and save as PNG
+            using SKImage image = surface.Snapshot();
+            using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
+            using FileStream stream = File.Create(Config.SaveFilepath);
+            data.SaveTo(stream);
+        }
+
+        // ---------------------------------------------------------------------
+        // Text helpers (SkiaSharp has no built-in layout, so alignment and word
+        // wrapping are done manually)
+        // ---------------------------------------------------------------------
+
+        private static SKFont CreateFont(SKTypeface typeface, float sizePixels)
+        {
+            return new SKFont(typeface, sizePixels)
+            {
+                Edging = SKFontEdging.Antialias,
+                Subpixel = true
+            };
+        }
+
+        /// <summary>Centers a single line of text horizontally and vertically inside the rect.</summary>
+        private static void DrawTextCentered(SKCanvas canvas, string text, SKFont font, SKPaint paint, SKRect rect)
+        {
+            SKFontMetrics metrics = font.Metrics;
+            float x = rect.MidX - font.MeasureText(text) / 2f;
+            float baseline = rect.MidY - (metrics.Ascent + metrics.Descent) / 2f;
+            canvas.DrawText(text, x, baseline, font, paint);
+        }
+
+        /// <summary>Right-aligns a single line of text to the top of the rect.</summary>
+        private static void DrawTextTopRight(SKCanvas canvas, string text, SKFont font, SKPaint paint, SKRect rect)
+        {
+            SKFontMetrics metrics = font.Metrics;
+            float x = rect.Right - font.MeasureText(text);
+            float baseline = rect.Top - metrics.Ascent; // Ascent is negative
+            canvas.DrawText(text, x, baseline, font, paint);
+        }
+
+        /// <summary>
+        /// Draws left-aligned, word-wrapped text inside the rect. Lines that do not
+        /// fully fit vertically are omitted (same behaviour as GDI+ DrawString).
+        /// </summary>
+        private static void DrawTextWrapped(SKCanvas canvas, string text, SKFont font, SKPaint paint, SKRect rect)
+        {
+            float lineHeight = font.Spacing;
+            float ascent = -font.Metrics.Ascent;
+            float y = rect.Top;
+
+            foreach (string line in WrapText(text, font, rect.Width))
+            {
+                if (y + lineHeight > rect.Bottom)
+                {
+                    break;
+                }
+
+                if (line.Length > 0)
+                {
+                    canvas.DrawText(line, rect.Left, y + ascent, font, paint);
+                }
+
+                y += lineHeight;
+            }
+        }
+
+        private static IEnumerable<string> WrapText(string text, SKFont font, float maxWidth)
+        {
+            foreach (string paragraph in text.Replace("\r", "").Split('\n'))
+            {
+                string line = "";
+
+                foreach (string word in paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string candidate = line.Length == 0 ? word : line + " " + word;
+                    if (font.MeasureText(candidate) <= maxWidth)
+                    {
+                        line = candidate;
+                        continue;
+                    }
+
+                    if (line.Length > 0)
+                    {
+                        yield return line;
+                        line = "";
+                    }
+
+                    // A single word wider than the box gets broken across lines
+                    string remaining = word;
+                    while (remaining.Length > 1 && font.MeasureText(remaining) > maxWidth)
+                    {
+                        int fit = Math.Max(1, (int)font.BreakText(remaining, maxWidth));
+                        yield return remaining.Substring(0, fit);
+                        remaining = remaining.Substring(fit);
+                    }
+
+                    line = remaining;
+                }
+
+                yield return line;
+            }
         }
     }
 }
