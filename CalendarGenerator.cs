@@ -7,15 +7,12 @@ namespace CalendarGenerator
 {
     internal class Program
     {
-
-        public static string csvPath = "D:\\Programowanie\\c#\\CalendarGenerator\\plan_zajec.csv";
-        public static string outputFileName = "D:\\Programowanie\\c#\\CalendarGenerator\\schedule_output.png";
-
+              
 
         private static void Main(string[] args)
         {
 
-
+            Config.Load("D:\\Programowanie\\c#\\CalendarGenerator\\config.json");
 
 
 
@@ -24,10 +21,7 @@ namespace CalendarGenerator
 
             Console.WriteLine("=== Weekly Schedule PNG Generator ===\n");
 
-            Console.Write("Enter DPI resolution (e.g. 300): ");
-            if (!int.TryParse(Console.ReadLine(), out int dpi) || dpi <= 0)
-                dpi = 300;
-
+            
         EnterDate:
             Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today: ");
             string? dateInput = Console.ReadLine();
@@ -54,13 +48,20 @@ namespace CalendarGenerator
 
 
 
-            if (!File.Exists(csvPath))
+            if (!File.Exists(Config.CsvFilepath))
             {
-                Console.WriteLine($"CSV file not found: {csvPath}");
+                Console.WriteLine($"CSV file not found: {Config.CsvFilepath}");
+                return;
+            }
+            if (!File.Exists(Config.AdditionalClassesFilepath))
+            {
+                Console.WriteLine($"CSV file not found: {Config.AdditionalClassesFilepath}");
                 return;
             }
 
-            List<ScheduleEntry> allEntries = LoadEntriesFromCsv(csvPath);
+            List<ScheduleEntry> allEntries = LoadEntriesFromCsv(Config.CsvFilepath);
+            allEntries.AddRange(LoadEntriesFromCsv(Config.AdditionalClassesFilepath));
+            
             DateTime targetSunday = targetMonday.AddDays(7);
 
             List<ScheduleEntry> weeklyEntries = allEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).ToList();
@@ -68,8 +69,8 @@ namespace CalendarGenerator
             Console.WriteLine($"Found {weeklyEntries.Count} class entries for the selected week.");
 
 
-            GenerateScheduleImage(weeklyEntries, dpi, outputFileName);
-            Console.WriteLine($"Successfully generated image: {outputFileName}");
+            GenerateScheduleImage(weeklyEntries);
+            Console.WriteLine($"Successfully generated image: {Config.SaveFilepath}");
         }
 
         private static List<ScheduleEntry> LoadEntriesFromCsv(string filePath)
@@ -116,27 +117,29 @@ namespace CalendarGenerator
         }
 
 
-        private static void GenerateScheduleImage(List<ScheduleEntry> entries, int dpi, string outputPath)
+        private static void GenerateScheduleImage(List<ScheduleEntry> entries)
         {
             // Calculating standard A4 landscape dimensions (1 : sqrt(2))
             float pageHeightMm = 210f;
-            float millimetersToPixels = dpi / 25.4f;
+            float millimetersToPixels = Config.Dpi / 25.4f;
 
             int heightPixels = (int)Math.Round(pageHeightMm * millimetersToPixels);
             int widthPixels = (int)Math.Round(heightPixels * Math.Sqrt(2));
-            int marginPixels = (int)Math.Round(5f * millimetersToPixels); // 5mm outer margin
+            int marginPixels = (int)Math.Round(Config.BorderMargin * millimetersToPixels); // outer margin
 
+            
+            
             using Bitmap bitmap = new Bitmap(widthPixels, heightPixels);
             using Graphics graphics = Graphics.FromImage(bitmap);
 
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
-            graphics.Clear(Color.FromArgb(255, 255, 255));
+            graphics.Clear(Config.BackgroundColor);
 
-            float scaleFactor = dpi / 96f;
-            using Font fontSmall = new Font("FL Pismo Techniczne", 6.5f * scaleFactor, FontStyle.Regular);
-            using Font fontRegular = new Font("FL Pismo TechniczneI", 8.5f * scaleFactor, FontStyle.Regular);
-            using Font fontHeader = new Font("FL Pismo Techniczne", 11f * scaleFactor, FontStyle.Regular);
+            float scaleFactor = Config.Dpi / 96f;
+            using Font fontSmall = new Font(Config.Font, Config.SmallFontSize * scaleFactor, FontStyle.Regular);
+            using Font fontRegular = new Font(Config.Font, Config.StandardFontSize * scaleFactor, FontStyle.Regular);
+            using Font fontHeader = new Font(Config.Font, Config.BigFontSize * scaleFactor, FontStyle.Regular);
 
             float workX = marginPixels;
             float workY = marginPixels;
@@ -199,13 +202,13 @@ namespace CalendarGenerator
                 if (i < maxHour - minHour)
                 {
                     string hourText = $"{minHour + i}:00";
-                    RectangleF timeRect = new RectangleF(workX, currentY, timeColumnWidth - (5f * scaleFactor), hourRowHeight);
+                    RectangleF timeRect = new RectangleF(workX, currentY, timeColumnWidth - (Config.BorderMargin * scaleFactor), hourRowHeight);
                     graphics.DrawString(hourText, fontSmall, Brushes.Black, timeRect, timeFormat);
                 }
             }
 
             // Draw outer border frame (5mm inside canvas)
-            graphics.DrawRectangle(Pens.Gray, workX, workY, workWidth, workHeight);
+            graphics.DrawRectangle(Pens.Black, workX, workY, workWidth, workHeight);
 
             // 3. Draw Class Boxes
             foreach (var entry in entries)
@@ -225,7 +228,7 @@ namespace CalendarGenerator
                 );
 
                 // Fill card background with white and draw outline
-                if (entry.Type == EClassType.Lecture)
+                if (Config.HightlightLectures && entry.Type == EClassType.Lecture)
                     graphics.FillRectangle(Brushes.LightGray, cardRect);
                 else
                     graphics.FillRectangle(Brushes.White, cardRect);
@@ -259,7 +262,7 @@ namespace CalendarGenerator
                 graphics.DrawString(entry.SubjectName, fontRegular, Brushes.Black, nameTextRect, textWrapFormat);
             }
 
-            bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+            bitmap.Save(Config.SaveFilepath, System.Drawing.Imaging.ImageFormat.Png);
         }
     }
 }
