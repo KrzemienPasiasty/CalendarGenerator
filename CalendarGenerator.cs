@@ -355,6 +355,7 @@ namespace CalendarGenerator
             canvas.DrawRect(workX, workY, workWidth, workHeight, borderPaint);
 
             // 3. Draw Class Boxes
+            // 3. Draw Class Boxes
             foreach (var entry in entries)
             {
                 int dayIndex = ((int)entry.Date.DayOfWeek + 6) % 7; // Monday = 0
@@ -380,55 +381,69 @@ namespace CalendarGenerator
 
                 // Top header text inside class box (e.g., "8:00, W")
                 string cardHeader = $"{entry.StartTime:h\\:mm}, {entry.GetTypeCode()}";
+                float textPadding = 2f * scaleFactor;
 
-                float textPadding = scaleFactor;
                 SKRect headerTextRect = SKRect.Create(
                     cardRect.Left + textPadding,
                     cardRect.Top + textPadding,
                     cardRect.Width - 2 * textPadding,
                     fontSmall.Spacing + 2
                 );
-
-
-                SKRect nameTextRect = SKRect.Create(
-                    cardRect.Left + textPadding,
-                    headerTextRect.Bottom + textPadding * 0.2f,
-                    cardRect.Width - 2 * textPadding,
-                    cardRect.Height - headerTextRect.Height - 3 * textPadding
-                );
-
                 DrawTextWrapped(canvas, cardHeader, fontSmall, textPaint, headerTextRect);
-                DrawTextWrapped(canvas, entry.SubjectName, fontRegular, textPaint, nameTextRect);
-                float f = 10f;
 
-                DrawWrappedTextBlock(canvas, "AAAAAA AAAAAA", fontRegular, textPaint, nameTextRect.Left, nameTextRect.Width, ref f);
+                // Sequential Y pointer starting below the card header
+                float currentY = headerTextRect.Bottom + (textPadding * 0.5f);
+                float contentLeft = cardRect.Left + textPadding;
+                float contentWidth = cardRect.Width - 2 * textPadding;
 
-                if (entry.Event != null)                
+                // Draw Subject Name sequentially
+                DrawWrappedTextBlock(canvas, entry.SubjectName, fontRegular, textPaint, contentLeft, contentWidth, ref currentY);
+
+                // If Extra Event exists, render it sequentially below the subject name
+                if (entry.Event != null)
                 {
                     Console.WriteLine($"Rendering extra event for class '{entry.SubjectName}' on {entry.Date:dd.MM.yyyy} at {entry.StartTime:h\\:mm} - {entry.Event.Name}");
-                    float leftX = cardRect.Left + textPadding;
-                    float maxWidth = cardRect.Width - (2 * textPadding);
-                    float currentY = headerTextRect.Bottom + (textPadding * 0.2f);
 
-                    // 1. Render Top Text (using fontRegular)
-                    int topLines = DrawWrappedTextBlock(canvas, entry.Event.Name, fontRegular, textPaint, leftX, maxWidth, ref currentY);
+                    currentY += textPadding * 0.5f; // Small separator space
+                    float startY = currentY;
 
-                    // Optional spacing between the regular and small text sections
-                    currentY += textPadding * 0.2f;
+                    // Draw Event Name using regular font (or bold if desired)
+                    int linesTop = DrawWrappedTextBlock(canvas, $"• {entry.Event.Name}", fontRegular, textPaint, contentLeft, contentWidth, ref currentY);
+                    int linesBottom = 0;
+                    // Draw Event Description using small font
+                    if (!string.IsNullOrWhiteSpace(entry.Event.Description))
+                    {
+                        currentY += textPadding * 0.2f;
+                        linesBottom = DrawWrappedTextBlock(canvas, entry.Event.Description, fontSmall, textPaint, contentLeft, contentWidth, ref currentY);
+                    }
 
-                    // 2. Render Bottom Text (using fontSmall)
-                    int bottomLines = DrawWrappedTextBlock(canvas, entry.Event.Description, fontSmall, textPaint, leftX, maxWidth, ref currentY);
-
-
-                    SKRect eventRect = SKRect.Create(
+                    SKRect eventBorder = SKRect.Create
+                        (
                         cardRect.Left + textPadding,
-                        nameTextRect.Bottom + textPadding * 0.2f,
+                        startY,
                         cardRect.Width - 2 * textPadding,
-                        cardRect.Height - nameTextRect.Height - headerTextRect.Height - 4 * textPadding
+                        fontSmall.Spacing * (linesBottom + linesTop) + textPadding * 2
                     );
-                }
 
+                    SKPaint eventPaint = new SKPaint();
+                    if (entry.Event.Priority == EEventPriority.Low)
+                        eventPaint.Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A);
+                    else if (entry.Event.Priority == EEventPriority.Medium)
+                        eventPaint.Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A);
+                    else if (entry.Event.Priority == EEventPriority.High)
+                        eventPaint.Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A);
+                    eventPaint.StrokeWidth = 2f;
+                    eventPaint.Style = SKPaintStyle.Stroke;
+
+
+
+
+
+                    canvas.DrawRect(eventBorder, eventPaint);
+                }
             }
+
+
 
             // Encode and save as PNG
             using SKImage image = surface.Snapshot();
