@@ -7,9 +7,15 @@ namespace CalendarGenerator
     {
         private static void Main(string[] args)
         {
-            Config.Load("D:\\Programowanie\\c#\\CalendarGenerator\\config.json");
+            Config.Load("D:\\Programowanie\\c#\\CalendarGenerator\\Data\\config.json");
+
+
+
+
+
 
             Console.WriteLine("=== Weekly Schedule PNG Generator ===\n");
+
 
         EnterDate:
             Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today: ");
@@ -46,7 +52,7 @@ namespace CalendarGenerator
             }
 
             List<ScheduleEntry> allEntries = LoadEntriesFromCsv(Config.CsvFilepath);
-            allEntries.AddRange(LoadEntriesFromCsv(Config.AdditionalClassesFilepath));
+
 
             DateTime targetSunday = targetMonday.AddDays(7);
 
@@ -54,6 +60,159 @@ namespace CalendarGenerator
 
             Console.WriteLine($"Found {weeklyEntries.Count} class entries for the selected week.");
 
+        Chooser:
+            Console.WriteLine("\n\nGenerate schedule image now: ANY KEY\nAdd additional classes: 1\nAdd extra events to classes: 2\n");
+            ConsoleKeyInfo key = Console.ReadKey(true);
+            if (key.KeyChar == '1')
+            {
+                Console.WriteLine("\n=== Add Additional Classes ===");
+                var newEntries = new List<ScheduleEntry>();
+
+                while (true)
+                {
+                    Console.Write("Enter name (or type 'q' to finish): ");
+                    string? subject = Console.ReadLine();
+                    if (string.IsNullOrWhiteSpace(subject) || subject.Trim().ToLower() == "q")
+                    {
+                        break;
+                    }
+
+                EnterClassDate:
+                    Console.Write("Enter date (DD.MM.YYYY): ");
+                    string? dateInputStr = Console.ReadLine();
+                    if (!DateTime.TryParseExact(dateInputStr?.Trim(), new[] { "d.MM.yyyy", "dd.MM.yyyy", "d.M.yyyy", "dd.M.yyyy" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime classDate))
+                    {
+                        Console.WriteLine("Invalid date format. Please use DD.MM.YYYY.");
+                        goto EnterClassDate;
+                    }
+
+                EnterStartTime:
+                    Console.Write("Enter start time (HH:mm): ");
+                    string? startInputStr = Console.ReadLine();
+                    if (!TimeSpan.TryParse(startInputStr, out TimeSpan startTime))
+                    {
+                        Console.WriteLine("Invalid time format. Please use HH:mm.");
+                        goto EnterStartTime;
+                    }
+
+                EnterEndTime:
+                    Console.Write("Enter end time (HH:mm): ");
+                    string? endInputStr = Console.ReadLine();
+                    if (!TimeSpan.TryParse(endInputStr, out TimeSpan endTime) || endTime <= startTime)
+                    {
+                        Console.WriteLine("Invalid end time (must be after start time). Please use HH:mm.");
+                        goto EnterEndTime;
+                    }
+
+                    newEntries.Add(new ScheduleEntry
+                    {
+                        Date = classDate,
+                        StartTime = startTime,
+                        EndTime = endTime,
+                        SubjectName = subject.Trim(),
+                        Type = EClassType.Other
+                    });
+
+                    Console.WriteLine("\nClass added successfully! Add another class? (Press any key to continue, or 'q' to finish):");
+                    var nextKey = Console.ReadKey(true);
+                    if (nextKey.KeyChar == 'q' || nextKey.KeyChar == 'Q')
+                    {
+                        break;
+                    }
+                    Console.WriteLine();
+                }
+
+                if (newEntries.Count > 0)
+                {
+                    bool fileExists = File.Exists(Config.AdditionalClassesFilepath);
+                    var linesToAppend = new List<string>();
+
+                    // If the file doesn't exist yet, add a header row because LoadEntriesFromCsv skips index 0
+                    if (!fileExists)
+                    {
+                        linesToAppend.Add(";;;SubjectName;Type;;;Date;StartTime;EndTime");
+                    }
+
+                    foreach (var entry in newEntries)
+                    {
+                        // Matches the column indices expected by LoadEntriesFromCsv:
+                        // columns[3] = SubjectName, columns[4] = Type ("Inne"), 
+                        // columns[7] = Date, columns[8] = StartTime, columns[9] = EndTime
+                        string line = $";;;{entry.SubjectName};Inne;;;{entry.Date:dd.MM.yyyy};{entry.StartTime:hh\\:mm};{entry.EndTime:hh\\:mm}";
+                        linesToAppend.Add(line);
+                    }
+
+                    File.AppendAllLines(Config.AdditionalClassesFilepath, linesToAppend);
+                    Console.WriteLine($"Successfully saved {newEntries.Count} new class(es) to {Config.AdditionalClassesFilepath}");
+                }
+                goto Chooser;
+                // Reload all additional classes and append those matching the target week
+                //List<ScheduleEntry> additionalEntries = LoadEntriesFromCsv(Config.AdditionalClassesFilepath);
+                //weeklyEntries.AddRange(additionalEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday));
+                //Console.WriteLine($"Total additional class entries loaded for the week: {additionalEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).Count()}.");
+            }
+            else if (key.KeyChar == '2')
+            {
+                Console.WriteLine("\n=== Add Extra Events to Classes ===");
+
+                if (weeklyEntries.Count == 0)
+                {
+                    Console.WriteLine("No classes found for the selected week.");
+                }
+                else
+                {
+                    foreach (var entry in weeklyEntries)
+                    {
+                        Console.WriteLine($"\n----------------------------------------");
+                        Console.WriteLine($"Class: {entry.SubjectName}");
+                        Console.WriteLine($"Date: {entry.Date:dd.MM.yyyy} | Time: {entry.StartTime:h\\:mm} - {entry.EndTime:h\\:mm}");
+                        Console.WriteLine($"----------------------------------------");
+                        Console.Write("Do you want to add an extra event? Press 'y' to add, or any other key to skip: ");
+
+                        var choiceKey = Console.ReadKey(true);
+
+                        if (choiceKey.KeyChar == 'y' || choiceKey.KeyChar == 'Y')
+                        {
+                            Console.Write("\nEnter event name: ");
+                            string? eventName = Console.ReadLine();
+
+                            Console.Write("Enter event description: ");
+                            string? eventDescription = Console.ReadLine();
+
+                            Console.Write("Select priority - [1] Low, [2] Medium, [3] High: ");
+                            var priorityKey = Console.ReadKey(true);
+                            Console.WriteLine(priorityKey.KeyChar);
+
+                            EEventPriority eventPriority;
+                            if (int.TryParse(priorityKey.KeyChar.ToString(), out int priorityValue))
+                                eventPriority = (EEventPriority)priorityValue;
+                            else
+                                eventPriority = EEventPriority.Medium;
+
+                            // Instantiate ExtraEvent and attach it to the ScheduleEntry
+                            entry.Event = new ExtraEvent
+                            {
+                                Name = string.IsNullOrWhiteSpace(eventName) ? "Extra Event" : eventName.Trim(),
+                                Description = eventDescription?.Trim() ?? string.Empty,
+                                Priority = eventPriority
+                            };
+
+                            Console.WriteLine("Successfully added extra event to this class!");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Skipped.");
+                        }
+                    }
+                }
+
+                goto Chooser;
+            }
+            else
+            { }
+
+
+            allEntries.AddRange(LoadEntriesFromCsv(Config.AdditionalClassesFilepath));
             GenerateScheduleImage(weeklyEntries);
             Console.WriteLine($"Successfully generated image: {Config.SaveFilepath}");
         }
@@ -122,9 +281,12 @@ namespace CalendarGenerator
             float pointsToPixels = Config.Dpi / 72f; // font sizes in config are in points
 
             using SKTypeface typeface = SKTypeface.FromFamilyName(Config.Font);
-            using SKFont fontSmall = CreateFont(typeface, Config.SmallFontSize * pointsToPixels);
-            using SKFont fontRegular = CreateFont(typeface, Config.StandardFontSize * pointsToPixels);
-            using SKFont fontHeader = CreateFont(typeface, Config.BigFontSize * pointsToPixels);
+            //using SKFont fontSmall = CreateFont(typeface, Config.SmallFontSize * pointsToPixels);
+            SKFont fontSmall = new SKFont(typeface, Config.SmallFontSize * pointsToPixels);
+
+
+            SKFont fontRegular = new SKFont(typeface, Config.StandardFontSize * pointsToPixels);
+            SKFont fontHeader = new SKFont(typeface, Config.BigFontSize * pointsToPixels);
 
             using SKPaint textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
             using SKPaint fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -227,6 +389,7 @@ namespace CalendarGenerator
                     fontSmall.Spacing + 2
                 );
 
+
                 SKRect nameTextRect = SKRect.Create(
                     cardRect.Left + textPadding,
                     headerTextRect.Bottom + textPadding * 0.2f,
@@ -236,6 +399,35 @@ namespace CalendarGenerator
 
                 DrawTextWrapped(canvas, cardHeader, fontSmall, textPaint, headerTextRect);
                 DrawTextWrapped(canvas, entry.SubjectName, fontRegular, textPaint, nameTextRect);
+                float f = 10f;
+
+                DrawWrappedTextBlock(canvas, "AAAAAA AAAAAA", fontRegular, textPaint, nameTextRect.Left, nameTextRect.Width, ref f);
+
+                if (entry.Event != null)                
+                {
+                    Console.WriteLine($"Rendering extra event for class '{entry.SubjectName}' on {entry.Date:dd.MM.yyyy} at {entry.StartTime:h\\:mm} - {entry.Event.Name}");
+                    float leftX = cardRect.Left + textPadding;
+                    float maxWidth = cardRect.Width - (2 * textPadding);
+                    float currentY = headerTextRect.Bottom + (textPadding * 0.2f);
+
+                    // 1. Render Top Text (using fontRegular)
+                    int topLines = DrawWrappedTextBlock(canvas, entry.Event.Name, fontRegular, textPaint, leftX, maxWidth, ref currentY);
+
+                    // Optional spacing between the regular and small text sections
+                    currentY += textPadding * 0.2f;
+
+                    // 2. Render Bottom Text (using fontSmall)
+                    int bottomLines = DrawWrappedTextBlock(canvas, entry.Event.Description, fontSmall, textPaint, leftX, maxWidth, ref currentY);
+
+
+                    SKRect eventRect = SKRect.Create(
+                        cardRect.Left + textPadding,
+                        nameTextRect.Bottom + textPadding * 0.2f,
+                        cardRect.Width - 2 * textPadding,
+                        cardRect.Height - nameTextRect.Height - headerTextRect.Height - 4 * textPadding
+                    );
+                }
+
             }
 
             // Encode and save as PNG
@@ -249,6 +441,67 @@ namespace CalendarGenerator
         // Text helpers (SkiaSharp has no built-in layout, so alignment and word
         // wrapping are done manually)
         // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// 
+        /// 
+        /// </summary>
+        /// <param name="canvas"></param>
+        /// <param name="text"></param>
+        /// <param name="font"></param>
+        /// <param name="paint"></param>
+        /// <param name="left"></param>
+        /// <param name="maxW"></param>
+        /// <param name="yPos"></param>
+        /// <returns>number of text lines</returns>
+        private static int DrawWrappedTextBlock(SKCanvas canvas, string text, SKFont font, SKPaint paint, float left, float maxW, ref float yPos)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+
+            var lines = new List<string>();
+            var paragraphs = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var paragraph in paragraphs)
+            {
+                var words = paragraph.Split(' ');
+                var currentLine = string.Empty;
+
+                foreach (var word in words)
+                {
+                    var testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+                    if (font.MeasureText(testLine) > maxW && !string.IsNullOrEmpty(currentLine))
+                    {
+                        lines.Add(currentLine);
+                        currentLine = word;
+                    }
+                    else
+                    {
+                        currentLine = testLine;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(currentLine))
+                {
+                    lines.Add(currentLine);
+                }
+            }
+
+            // Retrieve font metrics for precise vertical spacing and baseline calculation
+            SKFontMetrics metrics = font.Metrics;
+            float lineSpacing = metrics.Descent - metrics.Ascent + metrics.Leading;
+
+            foreach (var line in lines)
+            {
+                // Ascent is negative in a Y-down system, so subtracting it positions the baseline correctly
+                float baselineY = yPos - metrics.Ascent;
+                canvas.DrawText(line, new SKPoint(left, baselineY), SKTextAlign.Left, font, paint);
+
+                // Dynamically advance Y coordinate for the next line
+                yPos += lineSpacing;
+            }
+            return lines.Count;
+        }
+
 
         private static SKFont CreateFont(SKTypeface typeface, float sizePixels)
         {
@@ -265,7 +518,7 @@ namespace CalendarGenerator
             SKFontMetrics metrics = font.Metrics;
             float x = rect.MidX - font.MeasureText(text) / 2f;
             float baseline = rect.MidY - (metrics.Ascent + metrics.Descent) / 2f;
-            canvas.DrawText(text, x, baseline, font, paint);
+            canvas.DrawText(text, new SKPoint(x, baseline), SKTextAlign.Left, font, paint);
         }
 
         /// <summary>Right-aligns a single line of text to the top of the rect.</summary>
@@ -274,7 +527,7 @@ namespace CalendarGenerator
             SKFontMetrics metrics = font.Metrics;
             float x = rect.Right - font.MeasureText(text);
             float baseline = rect.Top - metrics.Ascent; // Ascent is negative
-            canvas.DrawText(text, x, baseline, font, paint);
+            canvas.DrawText(text, new SKPoint(x, baseline), SKTextAlign.Left, font, paint);
         }
 
         /// <summary>
@@ -296,7 +549,7 @@ namespace CalendarGenerator
 
                 if (line.Length > 0)
                 {
-                    canvas.DrawText(line, rect.Left, y + ascent, font, paint);
+                    canvas.DrawText(line, new SKPoint(rect.Left, y + ascent), SKTextAlign.Left, font, paint);
                 }
 
                 y += lineHeight;

@@ -12,6 +12,8 @@
         public string SubjectName { get; set; }
         public EClassType Type { get; set; }
 
+        public ExtraEvent Event { get; set; }
+
         /// <summary>
         /// Parses the raw class type string from CSV and assigns the corresponding ClassType enum value.
         /// </summary>

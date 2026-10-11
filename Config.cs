@@ -1,11 +1,6 @@
 ﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Text;
 using System.Globalization;
-using System.Text;
 
 
 namespace CalendarGenerator
@@ -17,9 +12,13 @@ namespace CalendarGenerator
         [JsonProperty] public static string? CsvFilepath { get; set; }
         [JsonProperty] public static string? SaveFilepath { get; set; }
         [JsonProperty] public static string? AdditionalClassesFilepath { get; set; }
-        [JsonProperty] public static int Dpi {  get; set; }
-        [JsonProperty] public static string? Font {  get; set; } //FL Pismo Techniczne
+        [JsonProperty] public static int Dpi { get; set; }
+        [JsonProperty] public static string? Font { get; set; } //FL Pismo Techniczne
         [JsonProperty][JsonConverter(typeof(ColorJsonConverter))] public static Color BackgroundColor { get; set; }
+        [JsonProperty][JsonConverter(typeof(ColorJsonConverter))] public static Color HightlightColor { get; set; }
+        [JsonProperty][JsonConverter(typeof(ColorJsonConverter))] public static Color LowPriorityEvent { get; set; }
+        [JsonProperty][JsonConverter(typeof(ColorJsonConverter))] public static Color MediumPriorityEvent { get; set; }
+        [JsonProperty][JsonConverter(typeof(ColorJsonConverter))] public static Color HighPriorityEvent { get; set; }
         [JsonProperty] public static int BorderMargin { get; set; } //5
         /// <summary>time and type font size</summary>
         [JsonProperty] public static float SmallFontSize { get; set; } //6.5
@@ -31,7 +30,7 @@ namespace CalendarGenerator
 
 
 
-      
+
 
         public static void Load(string path)
         {
@@ -58,7 +57,7 @@ namespace CalendarGenerator
         }
 
 
-        
+
     }
 
     public class ColorJsonConverter : JsonConverter<Color>
@@ -80,5 +79,5 @@ namespace CalendarGenerator
 
             return Color.FromArgb(int.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture));
         }
-    }        
+    }
 }

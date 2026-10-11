@@ -1,0 +1,18 @@
+{
+  "CsvFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\plan_zajec.csv",
+  "SaveFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\schedule_output.png",
+  "AdditionalClassesFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\additional_classes.csv",
+  "PaperSize": 2,
+  "Dpi": 300,
+  "Font": "FL Pismo Techniczne",
+  "BackgroundColor": "#FFFFFFFF",
+  "HightlightColor": "#DDDDDDDD",
+  "LowPriorityEvent": "#0000FFFF",
+  "MediumPriorityEvent": "#00FF00FF",
+  "HighPriorityEvent": "#FF0000FF",
+  "BorderMargin": 5,
+  "SmallFontSize": 6.5,
+  "StandardFontSize": 8,
+  "BigFontSize": 11.0,
+  "HightlightLectures": true
+}
