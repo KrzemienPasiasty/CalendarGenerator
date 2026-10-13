@@ -66,7 +66,7 @@ namespace CalendarGenerator
             if (key.KeyChar == '1')
             {
                 Console.WriteLine("\n=== Add Additional Classes ===");
-                var newEntries = new List<ScheduleEntry>();
+                List<ScheduleEntry> newEntries = new List<ScheduleEntry>();
 
                 while (true)
                 {
@@ -125,7 +125,7 @@ namespace CalendarGenerator
                 if (newEntries.Count > 0)
                 {
                     bool fileExists = File.Exists(Config.AdditionalClassesFilepath);
-                    var linesToAppend = new List<string>();
+                    List<string> linesToAppend = new List<string>();
 
                     // If the file doesn't exist yet, add a header row because LoadEntriesFromCsv skips index 0
                     if (!fileExists)
@@ -133,7 +133,7 @@ namespace CalendarGenerator
                         linesToAppend.Add(";;;SubjectName;Type;;;Date;StartTime;EndTime");
                     }
 
-                    foreach (var entry in newEntries)
+                    foreach (ScheduleEntry entry in newEntries)
                     {
                         // Matches the column indices expected by LoadEntriesFromCsv:
                         // columns[3] = SubjectName, columns[4] = Type ("Inne"), 
@@ -146,10 +146,7 @@ namespace CalendarGenerator
                     Console.WriteLine($"Successfully saved {newEntries.Count} new class(es) to {Config.AdditionalClassesFilepath}");
                 }
                 goto Chooser;
-                // Reload all additional classes and append those matching the target week
-                //List<ScheduleEntry> additionalEntries = LoadEntriesFromCsv(Config.AdditionalClassesFilepath);
-                //weeklyEntries.AddRange(additionalEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday));
-                //Console.WriteLine($"Total additional class entries loaded for the week: {additionalEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).Count()}.");
+
             }
             else if (key.KeyChar == '2')
             {
@@ -210,9 +207,11 @@ namespace CalendarGenerator
             }
             else
             { }
-
-
-            allEntries.AddRange(LoadEntriesFromCsv(Config.AdditionalClassesFilepath));
+            // Reload all additional classes and append those matching the target week
+            List<ScheduleEntry> additionalEntries = LoadEntriesFromCsv(Config.AdditionalClassesFilepath);
+            weeklyEntries.AddRange(additionalEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday));
+            
+            
             GenerateScheduleImage(weeklyEntries);
             Console.WriteLine($"Successfully generated image: {Config.SaveFilepath}");
         }
@@ -355,7 +354,6 @@ namespace CalendarGenerator
             canvas.DrawRect(workX, workY, workWidth, workHeight, borderPaint);
 
             // 3. Draw Class Boxes
-            // 3. Draw Class Boxes
             foreach (var entry in entries)
             {
                 int dayIndex = ((int)entry.Date.DayOfWeek + 6) % 7; // Monday = 0
@@ -404,17 +402,42 @@ namespace CalendarGenerator
                 {
                     Console.WriteLine($"Rendering extra event for class '{entry.SubjectName}' on {entry.Date:dd.MM.yyyy} at {entry.StartTime:h\\:mm} - {entry.Event.Name}");
 
+                    SKPaint eventPaint = new SKPaint();
+                    SKPaint eventTextPaint;
+                    if (entry.Event.Priority == EEventPriority.Low)
+                    {
+                        eventPaint.Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A);
+                        eventTextPaint = new SKPaint { Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A), IsAntialias = true };
+                    }
+                    else if (entry.Event.Priority == EEventPriority.Medium)
+                    {
+                        eventPaint.Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A);
+                        eventTextPaint = new SKPaint { Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A), IsAntialias = true };
+                    }
+                    else if (entry.Event.Priority == EEventPriority.High)
+                    {
+                        eventPaint.Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A);
+                        eventTextPaint = new SKPaint { Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A), IsAntialias = true };
+                    }
+                    else
+                    {
+                        eventPaint.Color = SKColors.Black;
+                        eventTextPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
+                    }
+                    eventPaint.StrokeWidth = 2f;
+                    eventPaint.Style = SKPaintStyle.Stroke;
+
                     currentY += textPadding * 0.5f; // Small separator space
                     float startY = currentY;
 
                     // Draw Event Name using regular font (or bold if desired)
-                    int linesTop = DrawWrappedTextBlock(canvas, $"• {entry.Event.Name}", fontRegular, textPaint, contentLeft, contentWidth, ref currentY);
+                    int linesTop = DrawWrappedTextBlock(canvas, $"• {entry.Event.Name}", fontRegular, eventTextPaint, contentLeft, contentWidth, ref currentY);
                     int linesBottom = 0;
                     // Draw Event Description using small font
                     if (!string.IsNullOrWhiteSpace(entry.Event.Description))
                     {
                         currentY += textPadding * 0.2f;
-                        linesBottom = DrawWrappedTextBlock(canvas, entry.Event.Description, fontSmall, textPaint, contentLeft, contentWidth, ref currentY);
+                        linesBottom = DrawWrappedTextBlock(canvas, entry.Event.Description, fontSmall, eventTextPaint, contentLeft, contentWidth, ref currentY);
                     }
 
                     SKRect eventBorder = SKRect.Create
@@ -425,15 +448,7 @@ namespace CalendarGenerator
                         fontSmall.Spacing * (linesBottom + linesTop) + textPadding * 2
                     );
 
-                    SKPaint eventPaint = new SKPaint();
-                    if (entry.Event.Priority == EEventPriority.Low)
-                        eventPaint.Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A);
-                    else if (entry.Event.Priority == EEventPriority.Medium)
-                        eventPaint.Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A);
-                    else if (entry.Event.Priority == EEventPriority.High)
-                        eventPaint.Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A);
-                    eventPaint.StrokeWidth = 2f;
-                    eventPaint.Style = SKPaintStyle.Stroke;
+                    
 
 
 
