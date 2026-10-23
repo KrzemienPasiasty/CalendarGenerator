@@ -1,4 +1,5 @@
 ﻿using SkiaSharp;
+using System.Diagnostics;
 using System.Globalization;
 
 namespace CalendarGenerator
@@ -6,8 +7,8 @@ namespace CalendarGenerator
     internal class Program
     {
         private static void Main(string[] args)
-        {
-            Config.Load("D:\\Programowanie\\c#\\CalendarGenerator\\Data\\config.json");
+        {            
+            Config.Load(".\\Data\\config.json");
 
 
 
@@ -18,11 +19,10 @@ namespace CalendarGenerator
 
 
         EnterDate:
-            Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today: ");
+            Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today:");
             string? dateInput = Console.ReadLine();
 
             DateTime inputDate;
-
             if (string.IsNullOrWhiteSpace(dateInput))
             {
                 // Nothing or only spaces -> use current date
@@ -272,9 +272,8 @@ namespace CalendarGenerator
             using SKSurface surface = SKSurface.Create(new SKImageInfo(widthPixels, heightPixels, SKColorType.Rgba8888, SKAlphaType.Premul));
             SKCanvas canvas = surface.Canvas;
 
-            // Config.BackgroundColor is assumed to be a System.Drawing.Color; drop the conversion if it is already an SKColor
-            var bg = Config.BackgroundColor;
-            canvas.Clear(new SKColor(bg.R, bg.G, bg.B, bg.A));
+            // Config.BackgroundColor is assumed to be a System.Drawing.Color; drop the conversion if it is already an SKColor            
+            canvas.Clear(Config.BackgroundColor);
 
             float scaleFactor = Config.Dpi / 96f;
             float pointsToPixels = Config.Dpi / 72f; // font sizes in config are in points
@@ -369,10 +368,10 @@ namespace CalendarGenerator
                     columnWidths[dayIndex] - 2 * marginOffset,
                     cardHeight - 2 * marginOffset
                 );
-
+                Console.WriteLine("COLOR: " + Config.HightlightColor);
                 // Fill card background and draw outline
                 fillPaint.Color = (Config.HightlightLectures && entry.Type == EClassType.Lecture)
-                    ? SKColors.LightGray
+                    ? Config.HightlightColor
                     : SKColors.White;
                 canvas.DrawRect(cardRect, fillPaint);
                 canvas.DrawRect(cardRect, borderPaint);
@@ -406,18 +405,18 @@ namespace CalendarGenerator
                     SKPaint eventTextPaint;
                     if (entry.Event.Priority == EEventPriority.Low)
                     {
-                        eventPaint.Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A);
-                        eventTextPaint = new SKPaint { Color = new SKColor(Config.LowPriorityEvent.R, Config.LowPriorityEvent.G, Config.LowPriorityEvent.B, Config.LowPriorityEvent.A), IsAntialias = true };
+                        eventPaint.Color = Config.LowPriorityEventColor;
+                        eventTextPaint = new SKPaint { Color = Config.LowPriorityEventColor, IsAntialias = true };
                     }
                     else if (entry.Event.Priority == EEventPriority.Medium)
                     {
-                        eventPaint.Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A);
-                        eventTextPaint = new SKPaint { Color = new SKColor(Config.MediumPriorityEvent.R, Config.MediumPriorityEvent.G, Config.MediumPriorityEvent.B, Config.MediumPriorityEvent.A), IsAntialias = true };
+                        eventPaint.Color = Config.MediumPriorityEventColor;
+                        eventTextPaint = new SKPaint { Color = Config.MediumPriorityEventColor, IsAntialias = true };
                     }
                     else if (entry.Event.Priority == EEventPriority.High)
                     {
-                        eventPaint.Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A);
-                        eventTextPaint = new SKPaint { Color = new SKColor(Config.HighPriorityEvent.R, Config.HighPriorityEvent.G, Config.HighPriorityEvent.B, Config.HighPriorityEvent.A), IsAntialias = true };
+                        eventPaint.Color = Config.HighPriorityEventColor;
+                        eventTextPaint = new SKPaint { Color = Config.HighPriorityEventColor, IsAntialias = true };
                     }
                     else
                     {

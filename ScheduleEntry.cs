@@ -2,17 +2,17 @@
 {
 
     /// <summary>
-    /// Represents a single class entry loaded from the schedule data.
+    /// Represents a single class loaded from the schedule data.
     /// </summary>
     public class ScheduleEntry
     {
         public DateTime Date { get; set; }
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
-        public string SubjectName { get; set; }
+        public string? SubjectName { get; set; }
         public EClassType Type { get; set; }
+        public ExtraEvent? Event { get; set; }
 
-        public ExtraEvent Event { get; set; }
 
         /// <summary>
         /// Parses the raw class type string from CSV and assigns the corresponding ClassType enum value.

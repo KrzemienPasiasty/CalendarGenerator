@@ -3,7 +3,7 @@
 
 
     /// <summary>
-    /// Represents the category of the academic class.
+    /// Represents the category of the academic classes types.
     /// </summary>
     public enum EClassType
     {
@@ -14,6 +14,5 @@
         PE, //Wf
         Project,
         Other
-
     }
 }
