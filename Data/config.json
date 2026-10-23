@@ -1,5 +1,5 @@
 {
-  "CsvFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\plan_zajec.csv",
+  "IcsUrl": "https://apps.usos.agh.edu.pl/services/tt/upcoming_ical?lang=pl&user_id=142133&key=PVVHaJnEdcGTxdXtz2jM",
   "SaveFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\schedule_output.png",
   "AdditionalClassesFilepath": "D:\\Programowanie\\c#\\CalendarGenerator\\Data\\additional_classes.csv",
   "PaperSize": 2,

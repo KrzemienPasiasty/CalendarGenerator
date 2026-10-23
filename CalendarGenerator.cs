@@ -1,22 +1,36 @@
-﻿using SkiaSharp;
+using SkiaSharp;
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Http;
 
 namespace CalendarGenerator
 {
     internal class Program
     {
         private static void Main(string[] args)
-        {            
+        {
             Config.Load(".\\Data\\config.json");
-
-
-
-
-
 
             Console.WriteLine("=== Weekly Schedule PNG Generator ===\n");
 
+            if (!File.Exists(Config.AdditionalClassesFilepath))
+            {
+                Console.WriteLine($"CSV file not found: {Config.AdditionalClassesFilepath}");
+                return;
+            }
+
+            List<ScheduleEntry> allEntries;
+            try
+            {
+                Console.WriteLine("Downloading schedule (.ics)...");
+                allEntries = LoadEntriesFromIcs(Config.IcsUrl!);
+                Console.WriteLine($"Loaded {allEntries.Count} total class entries.\n");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to load ICS schedule from '{Config.IcsUrl}': {ex.Message}");
+                return;
+            }
 
         EnterDate:
             Console.Write("Enter any date in target week (e.g. DD.MM.YYYY), or press Enter for today:");
@@ -40,23 +54,13 @@ namespace CalendarGenerator
 
             Console.WriteLine($"Monday of that week: {targetMonday:dd.MM.yyyy}");
 
-            if (!File.Exists(Config.CsvFilepath))
-            {
-                Console.WriteLine($"CSV file not found: {Config.CsvFilepath}");
-                return;
-            }
-            if (!File.Exists(Config.AdditionalClassesFilepath))
-            {
-                Console.WriteLine($"CSV file not found: {Config.AdditionalClassesFilepath}");
-                return;
-            }
-
-            List<ScheduleEntry> allEntries = LoadEntriesFromCsv(Config.CsvFilepath);
-
-
             DateTime targetSunday = targetMonday.AddDays(7);
 
-            List<ScheduleEntry> weeklyEntries = allEntries.Where(e => e.Date >= targetMonday && e.Date < targetSunday).ToList();
+            List<ScheduleEntry> weeklyEntries = allEntries
+                .Where(e => e.Date >= targetMonday && e.Date < targetSunday)
+                .OrderBy(e => e.Date)
+                .ThenBy(e => e.StartTime)
+                .ToList();
 
             Console.WriteLine($"Found {weeklyEntries.Count} class entries for the selected week.");
 
@@ -214,6 +218,157 @@ namespace CalendarGenerator
             
             GenerateScheduleImage(weeklyEntries);
             Console.WriteLine($"Successfully generated image: {Config.SaveFilepath}");
+        }
+
+        private static List<ScheduleEntry> LoadEntriesFromIcs(string source)
+        {
+            string icsContent;
+            if (Uri.TryCreate(source, UriKind.Absolute, out Uri? uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                using HttpClient client = new HttpClient();
+                icsContent = client.GetStringAsync(uri).GetAwaiter().GetResult();
+            }
+            else if (File.Exists(source))
+            {
+                icsContent = File.ReadAllText(source);
+            }
+            else
+            {
+                throw new FileNotFoundException($"ICS source not found or invalid URL: {source}");
+            }
+
+            return ParseIcsContent(icsContent);
+        }
+
+        private static List<ScheduleEntry> ParseIcsContent(string icsContent)
+        {
+            var entries = new List<ScheduleEntry>();
+
+            // Unfold multi-line properties per RFC 5545 (lines starting with space or tab continue previous line)
+            string[] rawLines = icsContent.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+            var unfoldedLines = new List<string>(rawLines.Length);
+
+            foreach (string line in rawLines)
+            {
+                if (line.Length > 0 && (line[0] == ' ' || line[0] == '\t') && unfoldedLines.Count > 0)
+                {
+                    unfoldedLines[unfoldedLines.Count - 1] += line.Substring(1);
+                }
+                else
+                {
+                    unfoldedLines.Add(line);
+                }
+            }
+
+            bool inEvent = false;
+            string? summary = null;
+            DateTime? dtStart = null;
+            DateTime? dtEnd = null;
+
+            foreach (string line in unfoldedLines)
+            {
+                string trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                    continue;
+
+                if (trimmed.Equals("BEGIN:VEVENT", StringComparison.OrdinalIgnoreCase))
+                {
+                    inEvent = true;
+                    summary = null;
+                    dtStart = null;
+                    dtEnd = null;
+                    continue;
+                }
+
+                if (trimmed.Equals("END:VEVENT", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (inEvent && dtStart.HasValue && dtEnd.HasValue && !string.IsNullOrWhiteSpace(summary))
+                    {
+                        string rawType = string.Empty;
+                        string subjectName = summary;
+
+                        // USOS format: "<TypeCode> - <SubjectName>", e.g. "CWA - Mechanika 2" or "W - Zapis konstrukcji"
+                        int separatorIndex = summary.IndexOf(" - ", StringComparison.Ordinal);
+                        if (separatorIndex > 0)
+                        {
+                            rawType = summary.Substring(0, separatorIndex).Trim();
+                            subjectName = summary.Substring(separatorIndex + 3).Trim();
+                        }
+
+                        entries.Add(new ScheduleEntry
+                        {
+                            Date = dtStart.Value.Date,
+                            StartTime = dtStart.Value.TimeOfDay,
+                            EndTime = dtEnd.Value.TimeOfDay,
+                            SubjectName = subjectName,
+                            Type = ScheduleEntry.ParseClassType(rawType)
+                        });
+                    }
+
+                    inEvent = false;
+                    continue;
+                }
+
+                if (!inEvent)
+                    continue;
+
+                int colonIndex = line.IndexOf(':');
+                if (colonIndex <= 0)
+                    continue;
+
+                string propAndParams = line.Substring(0, colonIndex).Trim();
+                string value = line.Substring(colonIndex + 1).Trim();
+                string propName = propAndParams.Split(';')[0].Trim().ToUpperInvariant();
+
+                if (propName == "SUMMARY")
+                {
+                    summary = value
+                        .Replace("\\,", ",")
+                        .Replace("\\;", ";")
+                        .Replace("\\n", " ")
+                        .Replace("\\\\", "\\")
+                        .Trim();
+                }
+                else if (propName == "DTSTART")
+                {
+                    if (TryParseIcsDateTime(value, out DateTime parsedStart))
+                    {
+                        dtStart = parsedStart;
+                    }
+                }
+                else if (propName == "DTEND")
+                {
+                    if (TryParseIcsDateTime(value, out DateTime parsedEnd))
+                    {
+                        dtEnd = parsedEnd;
+                    }
+                }
+            }
+
+            return entries;
+        }
+
+        private static bool TryParseIcsDateTime(string rawValue, out DateTime result)
+        {
+            rawValue = rawValue.Trim();
+
+            if (rawValue.EndsWith("Z", StringComparison.OrdinalIgnoreCase))
+            {
+                if (DateTime.TryParseExact(
+                    rawValue,
+                    new[] { "yyyyMMdd'T'HHmmss'Z'", "yyyyMMdd'T'HHmm'Z'" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                    out DateTime utcDateTime))
+                {
+                    result = utcDateTime.ToLocalTime();
+                    return true;
+                }
+            }
+
+            string[] formats = { "yyyyMMdd'T'HHmmss", "yyyyMMdd'T'HHmm", "yyyyMMdd" };
+            return DateTime.TryParseExact(rawValue, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
         }
 
         private static List<ScheduleEntry> LoadEntriesFromCsv(string filePath)
@@ -447,17 +602,9 @@ namespace CalendarGenerator
                         fontSmall.Spacing * (linesBottom + linesTop) + textPadding * 2
                     );
 
-                    
-
-
-
-
-
                     canvas.DrawRect(eventBorder, eventPaint);
                 }
             }
-
-
 
             // Encode and save as PNG
             using SKImage image = surface.Snapshot();

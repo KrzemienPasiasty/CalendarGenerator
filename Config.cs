@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using SkiaSharp;
 using System.Globalization;
 
@@ -12,7 +12,8 @@ namespace CalendarGenerator
     {
         public static Config Default { get; private set; } = new Config();
 
-        [JsonProperty] public static string? CsvFilepath { get; set; }
+        [JsonProperty] public static string? IcsUrl { get; set; }
+        [JsonProperty("CsvFilepath")] private static string? LegacyCsvFilepath { set => IcsUrl ??= value; }
         [JsonProperty] public static string? SaveFilepath { get; set; }
         [JsonProperty] public static string? AdditionalClassesFilepath { get; set; }
         [JsonProperty] public static int Dpi { get; set; }
@@ -50,7 +51,7 @@ namespace CalendarGenerator
             Default = JsonConvert.DeserializeObject<Config>(File.ReadAllText(path))
                       ?? throw new JsonException($"Config file '{path}' is empty or invalid.");
 
-            if (CsvFilepath == null || SaveFilepath == null || AdditionalClassesFilepath == null || Dpi <= 0 || Font == null)
+            if (string.IsNullOrWhiteSpace(IcsUrl) || SaveFilepath == null || AdditionalClassesFilepath == null || Dpi <= 0 || Font == null)
             {
                 Console.WriteLine("Same configuration are not exist. Please check the config.json file.");
                 throw new Exception("Configuration error");

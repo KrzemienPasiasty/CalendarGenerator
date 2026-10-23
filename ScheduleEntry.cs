@@ -1,4 +1,4 @@
-﻿namespace CalendarGenerator
+namespace CalendarGenerator
 {
 
     /// <summary>
@@ -15,26 +15,26 @@
 
 
         /// <summary>
-        /// Parses the raw class type string from CSV and assigns the corresponding ClassType enum value.
+        /// Parses the raw class type string from ICS or CSV and assigns the corresponding ClassType enum value.
         /// </summary>
         public static EClassType ParseClassType(string rawType)
         {
             if (string.IsNullOrWhiteSpace(rawType))
                 return EClassType.Other;
 
-            string normalized = rawType.ToLowerInvariant();
+            string normalized = rawType.Trim().ToLowerInvariant();
 
-            if (normalized.Contains("wykład"))
+            if (normalized == "w" || normalized == "wyk" || normalized.Contains("wykład"))
                 return EClassType.Lecture;
-            else if (normalized.Contains("ćwiczenia laboratoryjne"))
+            else if (normalized == "cwl" || normalized == "ćwl" || normalized == "lab" || normalized.Contains("ćwiczenia laboratoryjne") || normalized.Contains("laboratorium"))
                 return EClassType.Laboratory;
-            else if (normalized.Contains("ćwiczenia audytoryjne"))
+            else if (normalized == "cwa" || normalized == "ćwa" || normalized == "cw" || normalized == "ćw" || normalized.Contains("ćwiczenia audytoryjne"))
                 return EClassType.Tutorial;
-            else if (normalized.Contains("lektorat"))
+            else if (normalized == "lekt" || normalized == "lek" || normalized == "l" || normalized.Contains("lektorat"))
                 return EClassType.Language;
-            else if (normalized.Contains("zajęcia z wf"))
+            else if (normalized == "wf" || normalized.Contains("zajęcia z wf") || normalized.Contains("wychowanie fizyczne"))
                 return EClassType.PE;
-            else if (normalized.Contains("ćwiczenia projektowe"))
+            else if (normalized == "cwp" || normalized == "ćwp" || normalized == "p" || normalized == "proj" || normalized.Contains("ćwiczenia projektowe") || normalized.Contains("projekt"))
                 return EClassType.Project;
 
             return EClassType.Other;
